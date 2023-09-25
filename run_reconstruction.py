@@ -3,7 +3,7 @@ from utils.loading_utils import load_model, get_device
 import numpy as np
 import argparse
 import pandas as pd
-from utils.event_readers import FixedSizeEventReader, FixedDurationEventReader, NPZFileIterator
+from utils.event_readers import FixedSizeEventReader, FixedDurationEventReader, FixedSizeNPZFileIterator
 from utils.inference_utils import events_to_voxel_grid, events_to_voxel_grid_pytorch
 from utils.timers import Timer
 import time
@@ -90,7 +90,7 @@ if __name__ == "__main__":
                                                          duration_ms=args.window_duration,
                                                          start_index=start_index)
     elif args.npz_file_iterator:
-        event_window_iterator = NPZFileIterator(path_to_events, num_events=N)
+        event_window_iterator = FixedSizeNPZFileIterator(path_to_events, num_events=N)
 
     else:
         event_window_iterator = FixedSizeEventReader(path_to_events, num_events=N, start_index=start_index)

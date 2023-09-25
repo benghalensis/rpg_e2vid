@@ -41,6 +41,23 @@ def make_event_preview(events, mode='red-blue', num_bins_to_show=-1):
 
     return event_preview
 
+def event_visualizer(events, image, mode='red-blue'):
+    # events: [1 x C x H x W] event camera input
+    # mode: 'red-blue' or 'grayscale'
+    # num_bins_to_show: number of bins of the voxel grid to show. -1 means show all bins.
+    assert(mode in ['red-blue', 'grayscale'])
+    
+    if mode == 'red-blue':
+        # Red-blue mode
+        # positive events: blue, negative events: red
+        event_preview = np.copy(image)
+        event_rep = np.zeros((image.shape[0], image.shape[1]))
+        event_rep[events[:,2].astype(np.int16), events[:,1].astype(np.int16)] = events[:,3].astype(np.int16)
+        
+        event_preview[np.where(event_rep==1)] = np.array([255,0,0])
+        event_preview[np.where(event_rep==-1)] = np.array([0,0,255])
+
+        return event_preview
 
 def gkern(kernlen=5, nsig=1.0):
     """Returns a 2D Gaussian kernel array."""

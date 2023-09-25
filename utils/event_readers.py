@@ -4,9 +4,9 @@ from os.path import splitext
 import numpy as np
 from .timers import Timer
 import os
+import cv2
 
-
-class NPZFileIterator:
+class FixedSizeNPZFileIterator:
     def __init__(self, folder_path, num_events):
         self.folder_path = folder_path
         self.file_list = [f for f in os.listdir(folder_path) if f.endswith('.npz')]
@@ -31,6 +31,40 @@ class NPZFileIterator:
         return_data[:,0] /= 10**9
 
         return return_data[1:]
+
+class VisualizationIterator:
+    def __init__(self, event_folder_path, image_folder_path):
+        self.image_folder_path = image_folder_path
+        self.image_file_list = [f for f in os.listdir(image_folder_path) if f.endswith('.png')]
+        
+        self.event_folder_path = event_folder_path
+        self.event_file_list = [f for f in os.listdir(event_folder_path) if f.endswith('.npz')]
+
+        self.image_file_list = sorted(self.image_file_list)
+        self.event_file_list = sorted(self.event_file_list)
+        self.event_index = 0
+
+        self.image_freq = 1000
+        self.event_freq = 1000
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.event_index >= len(self.event_file_list):
+            raise StopIteration
+
+        event_data = np.zeros(shape=(1,4))
+        for i in range(round(self.event_freq/self.image_freq)):
+            data = np.load(os.path.join(self.event_folder_path, self.event_file_list[self.event_index]))
+            event_data = np.concatenate((event_data, np.array([data['t'], data['x'], data['y'], data['p']]).T))
+            self.event_index += 1
+        
+        # Convert time to seconds
+        event_data[:,0] /= 10**9
+        image_data = cv2.imread(os.path.join(self.image_folder_path, self.image_file_list[self.event_index]), cv2.IMREAD_COLOR)
+
+        return event_data[1:], image_data
 
 class FixedSizeEventReader:
     """
