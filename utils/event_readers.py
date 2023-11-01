@@ -32,6 +32,52 @@ class FixedSizeNPZFileIterator:
 
         return return_data[1:]
 
+class FixedDurationNPZFileIterator:
+    def __init__(self, folder_path, duration_ms):
+        self.folder_path = folder_path
+        self.file_list = [f for f in os.listdir(folder_path) if f.endswith('.npz')]
+        self.file_list = sorted(self.file_list)
+        self.index = 0
+
+        # duration_ms is the duration of the event window in milliseconds
+        self.duration_s = duration_ms * 10**-3
+        self.events = np.zeros(shape=(1,4))
+
+        # Load the first file and get the start time and assign it as the current time
+        data = np.load(os.path.join(self.folder_path, self.file_list[self.index]))
+        self.current_time = data['t'][0]/10**9
+    
+    def __iter__(self):
+        return self
+    
+    def __next__(self):
+        if self.index >= len(self.file_list):
+            raise StopIteration
+        
+        # Get the end time of the event window and add data to the event window until the end time is reached
+        self.current_time = self.current_time + self.duration_s
+        self.add_data(self.current_time)
+
+        # Find the event idx where the time is closest to the new_current_time and return it
+        idx = np.searchsorted(self.events[:,0], self.current_time, side="left")
+
+        if idx == len(self.events):
+            idx -= 2
+        event_window = self.events[:idx]
+        self.events = self.events[idx:]
+        return event_window
+    
+    def add_data(self, time_s):
+        while (self.index < len(self.file_list)) and (self.events[-1][0] < time_s):
+            file_path = os.path.join(self.folder_path, self.file_list[self.index])
+            data = np.load(file_path)
+            self.events = np.concatenate((self.events, np.array([data['t']/10**9, data['x'], data['y'], data['p']]).T))
+            self.index += 1
+        
+        # If the first event data is zeros, remove it
+        if np.all(self.events[0] == np.zeros(shape=(1,4))):
+            self.events = self.events[1:]
+
 class VisualizationIterator:
     def __init__(self, event_folder_path, image_folder_path):
         self.image_folder_path = image_folder_path
