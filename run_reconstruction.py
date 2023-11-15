@@ -2,7 +2,6 @@ import torch
 from utils.loading_utils import load_model, get_device
 import numpy as np
 import argparse
-import pandas as pd
 from utils.event_readers import FixedSizeEventReader, FixedDurationEventReader, FixedSizeNPZFileIterator, FixedDurationNPZFileIterator
 from utils.inference_utils import events_to_voxel_grid, events_to_voxel_grid_pytorch
 from utils.timers import Timer
@@ -10,7 +9,8 @@ import time
 from image_reconstructor import ImageReconstructor
 from options.inference_options import set_inference_options
 import tqdm
-
+import os
+import shutil
 
 if __name__ == "__main__":
 
@@ -57,6 +57,11 @@ if __name__ == "__main__":
 
     model = model.to(device)
     model.eval()
+    
+    # Remove the reconstruction output directory
+    event_previews_folder = os.path.join(args.output_folder, args.dataset_name)
+    if os.path.exists(event_previews_folder):
+        shutil.rmtree(event_previews_folder)
 
     reconstructor = ImageReconstructor(model, height, width, model.num_bins, args)
 

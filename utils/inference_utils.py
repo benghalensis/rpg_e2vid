@@ -208,11 +208,14 @@ class ImageWriter:
             cv2.imwrite(join(self.event_previews_folder,
                              'events_{:010d}.png'.format(event_tensor_id)), event_preview)
 
-        cv2.imwrite(join(self.output_folder, self.dataset_name,
-                         'frame_{:010d}.png'.format(event_tensor_id)), img)
         if stamp is not None:
             self.timestamps_file.write('{:.18f}\n'.format(stamp))
-
+            cv2.imwrite(join(self.output_folder, self.dataset_name,
+                            'frame_{:010d}.png'.format(int(stamp*1e6))), img)
+        else:
+            cv2.imwrite(join(self.output_folder, self.dataset_name,
+                            'frame_{:010d}.png'.format(event_tensor_id)), img)
+    
     def __cleanup__(self):
         if self.output_folder:
             self.timestamps_file.close()

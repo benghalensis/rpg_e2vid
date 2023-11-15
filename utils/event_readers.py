@@ -1,10 +1,10 @@
-import pandas as pd
 import zipfile
 from os.path import splitext
 import numpy as np
 from .timers import Timer
 import os
 import cv2
+from tqdm import tqdm
 
 class FixedSizeNPZFileIterator:
     def __init__(self, folder_path, num_events):
@@ -33,7 +33,7 @@ class FixedSizeNPZFileIterator:
         return return_data[1:]
 
 class FixedDurationNPZFileIterator:
-    def __init__(self, folder_path, duration_ms):
+    def __init__(self, folder_path, duration_ms, zero_start_time=True):
         self.folder_path = folder_path
         self.file_list = [f for f in os.listdir(folder_path) if f.endswith('.npz')]
         self.file_list = sorted(self.file_list)
@@ -43,15 +43,22 @@ class FixedDurationNPZFileIterator:
         self.duration_s = duration_ms * 10**-3
         self.events = np.zeros(shape=(1,4))
 
-        # Load the first file and get the start time and assign it as the current time
-        data = np.load(os.path.join(self.folder_path, self.file_list[self.index]))
-        self.current_time = data['t'][0]/10**9
-    
+        if zero_start_time:
+            self.current_time = 0
+        else:
+            # Load the first file and get the start time and assign it as the current time
+            data = np.load(os.path.join(self.folder_path, self.file_list[self.index]))['event_data'].astype(np.float64)
+            self.current_time = data[0,0]/10**9
+
+        # Add the tqdm progress bar
+        self.pbar = tqdm(total=len(self.file_list), desc='NPZ fixed duration iterator progress')
+
     def __iter__(self):
         return self
     
     def __next__(self):
-        if self.index >= len(self.file_list):
+        if self.index >= len(self.file_list) and self.events.shape[0] == 0:
+            self.pbar.close()
             raise StopIteration
         
         # Get the end time of the event window and add data to the event window until the end time is reached
@@ -60,9 +67,7 @@ class FixedDurationNPZFileIterator:
 
         # Find the event idx where the time is closest to the new_current_time and return it
         idx = np.searchsorted(self.events[:,0], self.current_time, side="left")
-
-        if idx == len(self.events):
-            idx -= 2
+        
         event_window = self.events[:idx]
         self.events = self.events[idx:]
         return event_window
@@ -70,9 +75,11 @@ class FixedDurationNPZFileIterator:
     def add_data(self, time_s):
         while (self.index < len(self.file_list)) and (self.events[-1][0] < time_s):
             file_path = os.path.join(self.folder_path, self.file_list[self.index])
-            data = np.load(file_path)
-            self.events = np.concatenate((self.events, np.array([data['t']/10**9, data['x'], data['y'], data['p']]).T))
+            data = np.load(file_path)['event_data'].astype(np.float64)
+            data[:,0] = data[:,0] / 10**9
+            self.events = np.concatenate((self.events, data))
             self.index += 1
+            self.pbar.update(1)
         
         # If the first event data is zeros, remove it
         if np.all(self.events[0] == np.zeros(shape=(1,4))):
@@ -121,6 +128,7 @@ class FixedSizeEventReader:
     def __init__(self, path_to_event_file, num_events=10000, start_index=0):
         print('Will use fixed size event windows with {} events'.format(num_events))
         print('Output frame rate: variable')
+        import pandas as pd
         self.iterator = pd.read_csv(path_to_event_file, delim_whitespace=True, header=None,
                                     names=['t', 'x', 'y', 'pol'],
                                     dtype={'t': np.float64, 'x': np.int16, 'y': np.int16, 'pol': np.int16},
