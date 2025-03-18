@@ -5,6 +5,7 @@ from .timers import Timer
 import os
 import cv2
 from tqdm import tqdm
+import h5py
 
 class FixedSizeNPZFileIterator:
     def __init__(self, folder_path, num_events):
@@ -84,6 +85,51 @@ class FixedDurationNPZFileIterator:
         # If the first event data is zeros, remove it
         if np.all(self.events[0] == np.zeros(shape=(1,4))):
             self.events = self.events[1:]
+
+class FixedDurationH5FileIterator:
+    def __init__(self, event_file_path, duration_ms, zero_start_time=True):
+        self.folder_path = event_file_path
+        self.file = h5py.File(event_file_path, 'r')
+        self.ms_to_idx = self.file['ms_to_idx'][:]
+        self.zero_start_time = zero_start_time
+        self.fps = 10
+        step_ms = int(1e3 / self.fps)
+        self.index = 0
+
+        self.metadata_list = []
+
+        for idx in range(0, 9):
+            if idx*step_ms >= len(self.ms_to_idx):
+                continue
+
+            self.metadata_list.append({
+                'event_path': event_file_path,
+                'start_ms': int(step_ms*idx),
+                'end_ms': int(step_ms*(idx+1))
+            })
+    
+    def __iter__(self):
+        return self
+    
+    def __next__(self):
+        if self.index >= len(self.metadata_list):
+            raise StopIteration
+
+        metadata = self.metadata_list[self.index]
+        event_path = metadata['event_path']
+        time_window = [metadata['start_ms'], metadata['end_ms']]
+        time_interval = metadata['end_ms'] - metadata['start_ms']
+
+        sidx = self.ms_to_idx[metadata['start_ms']]
+        eidx = self.ms_to_idx[metadata['end_ms']]
+
+        t = self.file['events/t'][sidx:eidx].astype(np.float64)
+        y = self.file['events/y'][sidx:eidx].astype(np.float64)
+        x = self.file['events/x'][sidx:eidx].astype(np.float64)
+        p = self.file['events/p'][sidx:eidx].astype(np.float64)
+
+        self.index += 1
+        return np.array([t, x, y, p]).T
 
 class VisualizationIterator:
     def __init__(self, event_folder_path, image_folder_path):

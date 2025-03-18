@@ -2,7 +2,7 @@ import torch
 from utils.loading_utils import load_model, get_device
 import numpy as np
 import argparse
-from utils.event_readers import FixedSizeEventReader, FixedDurationEventReader, FixedSizeNPZFileIterator, FixedDurationNPZFileIterator
+from utils.event_readers import FixedSizeEventReader, FixedDurationEventReader, FixedSizeNPZFileIterator, FixedDurationNPZFileIterator, FixedDurationH5FileIterator
 from utils.inference_utils import events_to_voxel_grid, events_to_voxel_grid_pytorch
 from utils.timers import Timer
 import time
@@ -12,6 +12,13 @@ import tqdm
 import os
 import shutil
 
+'''
+Running this script:
+python3 run_reconstruction.py --path_to_model pretrained/E2VID_lightweight.pth.tar 
+-i /ocean/projects/cis220039p/shared/tartanair_v2_event/IndustrialHangarAutoExposure/Data_easy/P001/events/events_output/ 
+--width 640 --height 640 --auto_hdr --npz_file_iterator_fd --window_duration 50 
+--output_folder /ocean/projects/cis220039p/shared/tartanair_v2_event/IndustrialHangarAutoExposure/Data_easy/P001/events/events_output/
+'''
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(
@@ -24,6 +31,7 @@ if __name__ == "__main__":
     parser.add_argument('--fixed_duration', dest='fixed_duration', action='store_true')
     parser.add_argument('--npz_file_iterator', dest='npz_file_iterator', action='store_true')
     parser.add_argument('--npz_file_iterator_fd', dest='npz_file_iterator_fd', action='store_true')
+    parser.add_argument('--h5_file_iterator', dest='h5_file_iterator', action='store_true')
     parser.set_defaults(fixed_duration=False)
     parser.add_argument('-N', '--window_size', default=None, type=int,
                         help="Size of each event window, in number of events. Ignored if --fixed_duration=True")
@@ -41,13 +49,11 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # Read sensor size from the first first line of the event file
+    # Parse the input path
+    if args.input_file.endswith('/'):
+        args.input_file = args.input_file[:-1]
     path_to_events = args.input_file
 
-    # header = pd.read_csv(path_to_events, delim_whitespace=True, header=None, names=['width', 'height'],
-    #                      dtype={'width': np.int32, 'height': np.int32},
-    #                      nrows=1)
-    # width, height = header.values[0]
     width, height = (args.width, args.height)
     print('Sensor size: {} x {}'.format(width, height))
 
@@ -59,6 +65,8 @@ if __name__ == "__main__":
     model.eval()
     
     # Remove the reconstruction output directory
+    if args.output_folder is None:
+        args.output_folder = os.path.dirname(args.input_file)
     event_previews_folder = os.path.join(args.output_folder, args.dataset_name)
     if os.path.exists(event_previews_folder):
         shutil.rmtree(event_previews_folder)
@@ -97,6 +105,9 @@ if __name__ == "__main__":
                                                          start_index=start_index)
     elif args.npz_file_iterator:
         event_window_iterator = FixedSizeNPZFileIterator(path_to_events, num_events=N)
+    
+    elif args.h5_file_iterator:
+        event_window_iterator = FixedDurationH5FileIterator(path_to_events, duration_ms=args.window_duration)
 
     elif args.npz_file_iterator_fd:
         event_window_iterator = FixedDurationNPZFileIterator(path_to_events, duration_ms=args.window_duration)
